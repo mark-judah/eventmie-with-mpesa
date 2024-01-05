@@ -1,0 +1,35 @@
+
+@use "sass:math";
+
+@mixin font-noline($sizeValue){
+  $remValue: $sizeValue;
+  $pxValue: ($sizeValue * 10);
+  font-size: unquote("#{$pxValue}px");
+  font-size: unquote("#{$remValue}rem");
+}
+
+
+@mixin font-size($font-size){
+    $pxFontValue: ($font-size * 0.1);
+    $pxLineValue: ($font-size * 0.1 * 1.5);
+    font-size: $font-size * 1px;
+    line-height: $font-size * 1.5 * 1px;
+    font-size: unquote("#{$pxFontValue}rem");
+    line-height: unquote("#{$pxLineValue}rem");
+}
+
+
+@mixin width($param){
+    max-width: math.div($param * 100, 12%);
+}
+
+
+@mixin max-width($param){
+   max-width: math.div($param * 100, 12%);
+}
+
+
+@mixin min-width($param){
+    min-width: math.div($param * 100, 12%);
+}
+
