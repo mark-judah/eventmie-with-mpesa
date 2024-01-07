@@ -15,6 +15,7 @@ use Classiebit\Eventmie\Models\Commission;
 use Classiebit\Eventmie\Models\Transaction;
 use Classiebit\Eventmie\Models\Tax;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Redirect;
 
 class BookingsController extends Controller
 {
@@ -351,6 +352,7 @@ class BookingsController extends Controller
                 $booking[$key]['ticket_title']      = $value['ticket_title'];
                 $booking[$key]['item_sku']          = $data['event']['item_sku'];
                 $booking[$key]['currency']          = setting('regional.currency_default');
+                $booking[$key]['mpesa_phone_number']          = $request->mpesa_phone_number;
 
                 $booking[$key]['event_repetitive']  = $data['event']->repetitive > 0 ? 1 : 0;
 
@@ -521,35 +523,40 @@ class BookingsController extends Controller
     /* =================== MPESA ==================== */
     protected function mpesa($booking)
     {
-        try {
-            \Storage::disk('local')->put('booking_data.txt',json_encode($booking));
-       } catch (\Exception $e) {
-            dd($e);
-       }
+       
        //generateAccessToken
-       $consumerKey='CVOigKOAGZkkqksqhSh802F1rI473OiW';
-       $consumerSecret='xvXtpHRAGLiKvAzz';
-       $url='https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials';
+       $consumerKey = env('MPESA_CONSUMER_KEY');
+       $consumerSecret = env('MPESA_CONSUMER_SECRET');
+       $url = env('MPESA_OAUTH_URL');
 
        $response=Http::withBasicAuth($consumerKey,$consumerSecret)->get($url);
        $accessToken=$response['access_token'];
        //token expires in 1hr,store and use for 1 hr
 
        //initiate stkPush
-       $stkPushUrl='https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest';
-       $passKey='bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919';
-       $businessShortCode=174379;
-       $timestamp=Carbon::now()->format('YmdHis');
-       $password=base64_encode($businessShortCode.$passKey.$timestamp);
-       $transactionType='CustomerPayBillOnline';
-       $amount=1;
-       $partyA=254708573898;
-       $partyB=174379;
-       $phoneNumber=254708573898;
-       $callBackUrl='https://e192-105-162-23-178.ngrok-free.app/bookings/api/stk-callback';//must be https
-       $accouuntReference='Eventmie';
-       $transactionDescription='Ticket Purchase';
+       $stkPushUrl = env('MPESA_STK_PUSH_URL');
+       $passKey = env('MPESA_PASS_KEY');
+       $businessShortCode = env('MPESA_BUSINESS_SHORT_CODE');
+       $timestampFormat = env('MPESA_TIMESTAMP_FORMAT');
+       $timestamp = Carbon::now()->format($timestampFormat);
+       $password = base64_encode($businessShortCode . $passKey . $timestamp);
+       $transactionType = env('MPESA_TRANSACTION_TYPE');
 
+       $amount=1;
+       $partyA=$booking[key($booking)]['mpesa_phone_number'];
+       $partyB=174379;
+       $phoneNumber=$booking[key($booking)]['mpesa_phone_number'];
+
+       $callBackUrl = env('MPESA_CALLBACK_URL');
+       $accountReference = env('MPESA_ACCOUNT_REFERENCE');
+       $transactionDescription = env('MPESA_TRANSACTION_DESCRIPTION');
+
+       unset($booking[key($booking)]['mpesa_phone_number']);
+       try {
+        \Storage::disk('local')->put('booking_data.txt',json_encode($booking));
+        } catch (\Exception $e) {
+                dd($e);
+        }
        $stkResponse=Http::withToken($accessToken)->post($stkPushUrl,[
         'BusinessShortCode'=>$businessShortCode,
         'Password'=>$password,
@@ -560,23 +567,25 @@ class BookingsController extends Controller
         'PartyB'=>$businessShortCode,
         'PhoneNumber'=>$partyA,
         'CallBackURL'=>$callBackUrl,
-        'AccountReference'=>$accouuntReference,
+        'AccountReference'=>$accountReference,
         'TransactionDesc'=>$transactionDescription
        ]);
 
-       return $stkResponse;
-
+       if($stkResponse->getStatusCode()==200){
+        return response(['status' => true,'message'=>'Request recieved, you will receive an M-pesa prompt to complete the transaction.'], Response::HTTP_OK);    
+       }else{
+        return error('An error occured, please retry', Response::HTTP_REQUEST_TIMEOUT);
+       }
+       
 
     }
 
     public function stkCallBack(Request $request)
     {
-        \Storage::disk('local')->put('stk.txt',$request);
+        try {
+            \Storage::disk('local')->put('stk.txt',$request);
        
-        //handle transaction success or failure
-
         //finish checkout
-        // prepare data to insert into table
          $data = session('pre_payment');
         $order_data = \Storage::disk('local')->get('order_data.txt');
          if($order_data==null){
@@ -602,14 +611,23 @@ class BookingsController extends Controller
          // IMPORTANT!!! clear session data setted during checkout process
         //  session()->forget(['pre_payment', 'booking']);
          
-         
-         //if customer then redirect to mybookings
-         $url = route('eventmie.mybookings_index');
-        //  if(Auth::user()->hasRole('organiser'))
-        //      $url = route('eventmie.obookings_index');
-         
-        //  if(Auth::user()->hasRole('admin'))
-        //      $url = route('voyager.bookings.index');
+        //if customer then redirect to mybookings
+
+        $url = route('eventmie.mybookings_index');
+
+        // if(Auth::user()->hasRole('customer')){
+        //     \Storage::disk('local')->put('role.txt',Auth::user());
+        //     $url = route('eventmie.mybookings_index');
+        // }
+        // if(Auth::user()->hasRole('organiser')){
+        //     \Storage::disk('local')->put('role.txt',Auth::user());
+        //     $url = route('eventmie.obookings_index');
+        // }
+        // if(Auth::user()->hasRole('admin')){
+        //     \Storage::disk('local')->put('role.txt',Auth::user());
+        //     $url = route('voyager.bookings.index');
+        // }
+        
         $all_data=[];
         $all_data['order_number']       = time().rand(1,988);
         $all_data['txn_id']             = $request['Body']['stkCallback']['CallbackMetadata']['Item'][1]['Value'];
@@ -647,10 +665,14 @@ class BookingsController extends Controller
 
             $msg = __('eventmie-pro::em.booking_success');
             session()->flash('status', $msg);
-            // return success_redirect($msg, $url);
-            return redirect()->route('mybookings_index')->with('success', $msg);
-    
+           
+            return response(['status' => true,'message'=>'Ticket purchased successfully, check your bookings page to download'], Response::HTTP_OK);    
+
         }   
+        } catch (\Throwable $th) {
+            \Storage::disk('local')->put('errot.txt',$th);
+
+        }
 
     }
 

@@ -1,1 +1,0 @@
-{"item_sku":170439757661,"order_number":"1704643798834","product_title":"Odoo Roadshow","price_title":" | Odoo Roadshow Nairobi | ","price_tagline":" | 1 | ","price":10.5}

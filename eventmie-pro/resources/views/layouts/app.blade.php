@@ -1,6 +1,7 @@
 <!doctype html>
 <html class="no-js" lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
+    {{-- <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests"> --}}
 
     @include('eventmie::layouts.meta')
 
@@ -9,6 +10,7 @@
     @include('eventmie::layouts.include_css')
 
     @yield('stylesheet')
+
 </head>
 
 <body class="home" {!! is_rtl() ? 'dir="rtl"' : '' !!}>

@@ -75,9 +75,11 @@
                                                 {{ booking_end_date != null ? booking_end_date : booking_date }}
                                             </p>
                                             <p class="mb-2" v-else>
-                                                {{ changeDateFormat(moment(userTimezone(event.start_date + ' '+event.start_time, 'YYYY - MM - DD HH: mm: ss').format('YYYY - MM - DD'))) }}
+                                                {{ changeDateFormat(moment(userTimezone(event.start_date + ' '+event.start_time, 'YYYY - MM - DD HH: mm: ss').format('YYYY - MM - DD')))
+                                                                                                }}
                                                 <small><strong>-</strong></small> <br>
-                                                {{ changeDateFormat(moment(userTimezone(event.end_date + ' ' + event.end_time,
+                                                {{ changeDateFormat(moment(userTimezone(event.end_date + ' ' +
+                                                    event.end_time,
                                                     'YYYY-MM-DD HH:mm:ss').format('YYYY-MM-DD'))) }}
                                             </p>
 
@@ -87,7 +89,8 @@
                                                         {{ end_time }} {{ '(' + showTimezone() + ')' }}</small></p>
                                                 <p v-else>
                                                     <small class="text-muted">{{ changeTimeFormat(start_time) }} - {{
-                                                        changeTimeFormat(end_time) }} {{ '(' + showTimezone() + ')' }}</small>
+                                                        changeTimeFormat(end_time) }} {{ '(' + showTimezone() + ')'
+    }}</small>
                                                 </p>
                                             </div>
                                         </div>
@@ -110,7 +113,8 @@
                                         <div class="w-50">
                                             <h6 class="my-0"><strong>{{ item.title }}</strong></h6>
                                             <p class="mb-2">{{ item.price > 0 ? item.price : '0.00' }}
-                                                <small>{{ currency }}</small></p>
+                                                <small>{{ currency }}</small>
+                                            </p>
 
                                             <!-- show tax only if quantity is set -->
                                             <div class="event-tax"
@@ -234,7 +238,7 @@
 
                                 <p class="m-0 lead lead-caption text-center ">{{ trans('em.payment') }}</p>
 
-                               
+
                                 <!-- Free -->
                                 <div class="d-block my-3 pl-3" v-if="total <= 0">
                                     <div class="radio-inline">
@@ -292,13 +296,13 @@
 
                         <div class="row mt-1">
                             <!-- custom code (&& payment_method==1) -->
-                            <div class="col-xs-12" v-if="login_user_id && payment_method==1">
+                            <div class="col-xs-12" v-if="login_user_id && payment_method == 1">
                                 <button :class="{ 'disabled': disable }" :disabled="disable" type="button"
                                     class="btn lgx-btn btn-block" @click="bookTickets()"><i
                                         class="fas fa-cash-register"></i> {{ (total <= 0) ? trans('em.rsvp') :
                                             trans('em.checkout') }}</button>
                             </div>
-                            
+
 
                             <div class="col-xs-12" v-if="!login_user_id">
                                 <div class="btn-group btn-group-justified">
@@ -310,7 +314,14 @@
                             </div>
 
                             <!-- custom code -->
-                            <div class="col-xs-12" v-if="login_user_id && payment_method==2">
+                            <div class="col-xs-12" v-if="login_user_id && payment_method == 2">
+
+                                <div class="form-group">
+                                    <label for="mpesa-number">M-pesa Phone Number </label>
+                                    <input type="text" class="form-control" v-model="mpesa_phone_number" name="mpesa_phone_number"
+                                        :placeholder="254700000000" required>
+                                </div>
+
                                 <button :class="{ 'disabled': disable }" :disabled="disable" type="button"
                                     class="btn lgx-btn btn-block" @click="bookTickets()"><i
                                         class="fas fa-cash-register"></i> Lipa na M-pesa</button>
@@ -370,6 +381,7 @@ export default {
             options: [],
             //selected customer
             customer: null,
+            mpesa_phone_number:null
         }
     },
 
@@ -401,6 +413,14 @@ export default {
         },
 
         bookTickets() {
+            if (this.mpesa_phone_number==null) {
+                this.showNotification('error', "Enter a phone number!");
+                return
+            }
+            if (this.mpesa_phone_number.length!=12) {
+                this.showNotification('error', "Phone number format error, use 254700000000 format");
+                return
+            }
             // show loader
             this.showLoaderNotification(trans('em.processing'));
 
@@ -644,7 +664,7 @@ export default {
             if (this.is_admin <= 0 && this.bookedTicketsTotal() > 0)
                 this.payment_method = 1;
 
-           
+
         },
 
         loginFirst() {
@@ -727,8 +747,8 @@ export default {
         },
 
         //custom code
-        payment_method:function(value){
-            this.payment_method=value
+        payment_method: function (value) {
+            this.payment_method = value
             console.log(this.payment_method)
         }
     },

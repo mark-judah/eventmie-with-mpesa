@@ -3363,6 +3363,17 @@ function _defineProperty(obj, key, value) { if (key in obj) { Object.definePrope
 //
 //
 //
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 
 
 
@@ -3385,7 +3396,8 @@ function _defineProperty(obj, key, value) { if (key in obj) { Object.definePrope
       // customers options
       options: [],
       //selected customer
-      customer: null
+      customer: null,
+      mpesa_phone_number: null
     };
   },
 
@@ -3407,7 +3419,17 @@ function _defineProperty(obj, key, value) { if (key in obj) { Object.definePrope
     },
 
     bookTickets() {
-      // show loader
+      if (this.mpesa_phone_number == null) {
+        this.showNotification('error', "Enter a phone number!");
+        return;
+      }
+
+      if (this.mpesa_phone_number.length != 12) {
+        this.showNotification('error', "Phone number format error, use 254700000000 format");
+        return;
+      } // show loader
+
+
       this.showLoaderNotification(trans('em.processing')); // prepare form data for post request
 
       this.disable = true;
@@ -72596,6 +72618,39 @@ var render = function() {
                     _vm._v(" "),
                     _vm.login_user_id && _vm.payment_method == 2
                       ? _c("div", { staticClass: "col-xs-12" }, [
+                          _c("div", { staticClass: "form-group" }, [
+                            _c("label", { attrs: { for: "mpesa-number" } }, [
+                              _vm._v("M-pesa Phone Number ")
+                            ]),
+                            _vm._v(" "),
+                            _c("input", {
+                              directives: [
+                                {
+                                  name: "model",
+                                  rawName: "v-model",
+                                  value: _vm.mpesa_phone_number,
+                                  expression: "mpesa_phone_number"
+                                }
+                              ],
+                              staticClass: "form-control",
+                              attrs: {
+                                type: "text",
+                                name: "mpesa_phone_number",
+                                placeholder: 254700000000,
+                                required: ""
+                              },
+                              domProps: { value: _vm.mpesa_phone_number },
+                              on: {
+                                input: function($event) {
+                                  if ($event.target.composing) {
+                                    return
+                                  }
+                                  _vm.mpesa_phone_number = $event.target.value
+                                }
+                              }
+                            })
+                          ]),
+                          _vm._v(" "),
                           _c(
                             "button",
                             {
