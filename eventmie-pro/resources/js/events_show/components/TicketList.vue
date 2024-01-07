@@ -300,7 +300,7 @@
                             </div>
                             
 
-                            <div class="col-xs-12" v-else>
+                            <div class="col-xs-12" v-if="!login_user_id">
                                 <div class="btn-group btn-group-justified">
                                     <button type="button" class="btn lgx-btn w-50" @click="signupFirst()"><i
                                             class="fas fa-user-plus"></i> {{ trans('em.register') }}</button>

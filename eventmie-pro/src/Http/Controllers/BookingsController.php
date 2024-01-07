@@ -14,7 +14,7 @@ use Classiebit\Eventmie\Models\User;
 use Classiebit\Eventmie\Models\Commission;
 use Classiebit\Eventmie\Models\Transaction;
 use Classiebit\Eventmie\Models\Tax;
-
+use Illuminate\Support\Facades\Http;
 
 class BookingsController extends Controller
 {
@@ -30,7 +30,7 @@ class BookingsController extends Controller
         $this->middleware('common');
     
         // authenticate except 
-        $this->middleware('auth')->except(['login_first', 'signup_first']);
+        $this->middleware('auth')->except(['login_first', 'signup_first','stkCallBack']);
 
         $this->event        = new Event;
         $this->ticket       = new Ticket;
@@ -468,18 +468,19 @@ class BookingsController extends Controller
             ], Response::HTTP_OK);
         }    
         
-        // return to paypal
+        
         session(['booking'=>$booking]);
 
-        return $this->init_checkout($booking);
+        return $this->init_checkout($booking,$request);
     }
 
      /** 
      * Initialize checkout process
      * 1. Validate data and start checkout process
     */
-    protected function init_checkout($booking)
+    protected function init_checkout($booking,$request)
     {   
+        
         // add all info into session
         $order = [
             'item_sku'          => $booking[key($booking)]['item_sku'],
@@ -504,9 +505,155 @@ class BookingsController extends Controller
 
         // set session data
         session(['pre_payment' => $order]);
-        
-        return $this->paypal($order, setting('regional.currency_default'));
+        try {
+            \Storage::disk('local')->put('order_data.txt',json_encode($order));
+       } catch (\Exception $e) {
+            dd($e);
+       }
+        $payment_method = (int) $request->payment_method;
+        if($payment_method==1){
+            return $this->paypal($order, setting('regional.currency_default'));
+        }elseif($payment_method==2){
+            return $this->mpesa($booking);
+        }
     }
+
+    /* =================== MPESA ==================== */
+    protected function mpesa($booking)
+    {
+        try {
+            \Storage::disk('local')->put('booking_data.txt',json_encode($booking));
+       } catch (\Exception $e) {
+            dd($e);
+       }
+       //generateAccessToken
+       $consumerKey='CVOigKOAGZkkqksqhSh802F1rI473OiW';
+       $consumerSecret='xvXtpHRAGLiKvAzz';
+       $url='https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials';
+
+       $response=Http::withBasicAuth($consumerKey,$consumerSecret)->get($url);
+       $accessToken=$response['access_token'];
+       //token expires in 1hr,store and use for 1 hr
+
+       //initiate stkPush
+       $stkPushUrl='https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest';
+       $passKey='bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919';
+       $businessShortCode=174379;
+       $timestamp=Carbon::now()->format('YmdHis');
+       $password=base64_encode($businessShortCode.$passKey.$timestamp);
+       $transactionType='CustomerPayBillOnline';
+       $amount=1;
+       $partyA=254708573898;
+       $partyB=174379;
+       $phoneNumber=254708573898;
+       $callBackUrl='https://e192-105-162-23-178.ngrok-free.app/bookings/api/stk-callback';//must be https
+       $accouuntReference='Eventmie';
+       $transactionDescription='Ticket Purchase';
+
+       $stkResponse=Http::withToken($accessToken)->post($stkPushUrl,[
+        'BusinessShortCode'=>$businessShortCode,
+        'Password'=>$password,
+        'Timestamp'=>$timestamp,
+        'TransactionType'=>$transactionType,
+        'Amount'=>$amount,
+        'PartyA'=>$partyA,
+        'PartyB'=>$businessShortCode,
+        'PhoneNumber'=>$partyA,
+        'CallBackURL'=>$callBackUrl,
+        'AccountReference'=>$accouuntReference,
+        'TransactionDesc'=>$transactionDescription
+       ]);
+
+       return $stkResponse;
+
+
+    }
+
+    public function stkCallBack(Request $request)
+    {
+        \Storage::disk('local')->put('stk.txt',$request);
+       
+        //handle transaction success or failure
+
+        //finish checkout
+        // prepare data to insert into table
+         $data = session('pre_payment');
+        $order_data = \Storage::disk('local')->get('order_data.txt');
+         if($order_data==null){
+            \Storage::disk('local')->put('data.txt',"empty data session");
+         }else{
+            \Storage::disk('local')->put('data.txt',$order_data);
+         }
+
+         $data=json_decode($order_data);
+
+        //  // unset extra columns
+        //  unset($data['product_title']);
+        //  unset($data['price_title']);
+        //  unset($data['price_tagline']);
+         
+        //  $booking = session('booking');
+        $booking = \Storage::disk('local')->get('booking_data.txt');
+        if($booking==null){
+           \Storage::disk('local')->put('booking.txt',"empty booking session");
+        }else{
+           \Storage::disk('local')->put('booking.txt',$booking);
+        }
+         // IMPORTANT!!! clear session data setted during checkout process
+        //  session()->forget(['pre_payment', 'booking']);
+         
+         
+         //if customer then redirect to mybookings
+         $url = route('eventmie.mybookings_index');
+        //  if(Auth::user()->hasRole('organiser'))
+        //      $url = route('eventmie.obookings_index');
+         
+        //  if(Auth::user()->hasRole('admin'))
+        //      $url = route('voyager.bookings.index');
+        $all_data=[];
+        $all_data['order_number']       = time().rand(1,988);
+        $all_data['txn_id']             = $request['Body']['stkCallback']['CallbackMetadata']['Item'][1]['Value'];
+        $all_data['amount_paid']        = $request['Body']['stkCallback']['CallbackMetadata']['Item'][0]['Value'];
+        $all_data['payment_status']     = $request['Body']['stkCallback']['ResultDesc'];
+        $all_data['payer_reference']    = $request['Body']['stkCallback']['CallbackMetadata']['Item'][3]['Value'];
+        $all_data['status']             = 1;
+        $all_data['created_at']         = Carbon::now();
+        $all_data['updated_at']         = Carbon::now();
+        $all_data['currency_code']      = setting('regional.currency_default');
+        $all_data['payment_gateway']    = 'mpesa';
+        
+        \Storage::disk('local')->put('all_data.txt',json_encode($all_data));
+
+
+        // insert data of mpesa transaction_id into transaction table
+        $flag                       = $this->transaction->add_transaction($all_data);
+
+        $all_data['transaction_id']     = $flag; // transaction Id
+        
+        $flag = $this->finish_booking(json_decode($booking,true), $all_data);
+
+        \Storage::disk('local')->put('flag.txt',json_encode($flag));
+
+        // in case of database failure
+        if(!$flag)
+        {        
+            \Storage::disk('local')->put('redirect.txt','failed');
+   
+            $msg = __('eventmie-pro::em.booking').' '.__('eventmie-pro::em.failed');
+            session()->flash('status', $msg);
+            return error_redirect($msg);
+        }else{
+            \Storage::disk('local')->put('redirect.txt','redirecting to '.$url);
+
+            $msg = __('eventmie-pro::em.booking_success');
+            session()->flash('status', $msg);
+            // return success_redirect($msg, $url);
+            return redirect()->route('mybookings_index')->with('success', $msg);
+    
+        }   
+
+    }
+
 
     /* =================== PAYPAL ==================== */
     // 2. Create an order and redirect to payment gateway
@@ -640,8 +787,10 @@ class BookingsController extends Controller
         // update commission session array
         // insert into commission
         $commission_data            = [];
-        $commission                 = session('commission');
+        // $commission                 = session('commission');
 
+        $all_commission = \Storage::disk('local')->get('commission.txt');
+        $commission=json_decode($all_commission,true);
         // delete commission data from session
         session()->forget(['commission']);
         $booking_data = [];
@@ -835,7 +984,7 @@ class BookingsController extends Controller
         }
     
         session(['commission'=>$commission]);
-
+        \Storage::disk('local')->put('commission.txt',json_encode($commission));
         return true;
     }
 
@@ -852,7 +1001,7 @@ class BookingsController extends Controller
 
         // get payment method
         // paypal will always be default payment method
-        // payment_method can either 1 or offline
+        // payment_method can either 1,2 or offline
         $payment_method = 1;
         if($request->has('payment_method'))
         {

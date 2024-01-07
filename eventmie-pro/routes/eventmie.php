@@ -199,6 +199,11 @@ Route::group([
         // API
         Route::post('/api/get_tickets', "$controller@get_tickets")->name('bookings_get_tickets');
         Route::post('/api/book_tickets', "$controller@book_tickets")->name('bookings_book_tickets');
+
+        // MPESA ROUTES
+        Route::post('/api/stk-callback', "$controller@stkCallBack")->name('mpesa_stk_scallback');
+
+
     });
     
     /* My Bookings (customers) */
@@ -382,6 +387,7 @@ Route::group([
         Route::post('get/event', "$controller@getEvent")->name('get_event');
     });
 
+   
     /* ============================= ALL OTHER ROUTES ABOVE ============================= */
     /* Wildcard routes (add all other routes above) */
     /* Static Pages */

@@ -72546,7 +72546,10 @@ var render = function() {
                             ]
                           )
                         ])
-                      : _c("div", { staticClass: "col-xs-12" }, [
+                      : _vm._e(),
+                    _vm._v(" "),
+                    !_vm.login_user_id
+                      ? _c("div", { staticClass: "col-xs-12" }, [
                           _c(
                             "div",
                             { staticClass: "btn-group btn-group-justified" },
@@ -72588,7 +72591,8 @@ var render = function() {
                               )
                             ]
                           )
-                        ]),
+                        ])
+                      : _vm._e(),
                     _vm._v(" "),
                     _vm.login_user_id && _vm.payment_method == 2
                       ? _c("div", { staticClass: "col-xs-12" }, [
